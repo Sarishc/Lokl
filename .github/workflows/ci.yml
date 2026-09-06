@@ -63,9 +63,14 @@ jobs:
       - name: Smoke e2e (mock mode)
         env:
           VITE_APP_MODE: mock
+          # Both e2e scripts default to 127.0.0.1, which never resolves on this
+          # runner (Vite binds to `localhost`) — same mismatch as the dev-server
+          # step above.
+          RELEASE_E2E_BASE_URL: http://localhost:5173
         run: npm run test:smoke
 
       - name: Release e2e (mock mode)
         env:
           VITE_APP_MODE: mock
+          RELEASE_E2E_BASE_URL: http://localhost:5173
         run: npm run test:release
