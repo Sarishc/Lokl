@@ -23,7 +23,7 @@ export function AuthPage() {
   const queryClient = useQueryClient();
   const setUser = useAppStore((state) => state.setUser);
   const reduceMotion = useReducedMotion();
-  const resendCooldownSeconds = api.mode === 'mock' ? 30 : 60;
+  const resendCooldownSeconds = __IS_MOCK_MODE__ ? 30 : 60;
   const [phone, setPhone] = useState(`${DEFAULT_PHONE_CODE}`);
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState('');
@@ -47,7 +47,7 @@ export function AuthPage() {
       setOtpSent(true);
       setTimer(resendCooldownSeconds);
       setCaptchaToken(undefined);
-      toast.success('OTP sent', { description: api.mode === 'mock' ? 'Use 123456 to continue in demo mode.' : 'Check your SMS inbox.' });
+      toast.success('OTP sent', { description: __IS_MOCK_MODE__ ? 'Use 123456 to continue in demo mode.' : 'Check your SMS inbox.' });
     },
     onError: (error: Error) => toast.error('Couldn’t send OTP', { description: error.message || 'Check the phone number and try again.' }),
   });
@@ -149,7 +149,7 @@ export function AuthPage() {
               <HCaptcha sitekey={captchaSiteKey} onVerify={setCaptchaToken} onExpire={() => setCaptchaToken(undefined)} onError={() => setCaptchaToken(undefined)} />
             </div>
           ) : (
-            api.mode === 'supabase' ? <p className="mt-3 text-xs leading-5 text-[color:var(--color-warning)]">CAPTCHA site key is not configured locally. Enable Supabase CAPTCHA protection and set VITE_HCAPTCHA_SITE_KEY before public signup.</p> : null
+            !__IS_MOCK_MODE__ ? <p className="mt-3 text-xs leading-5 text-[color:var(--color-warning)]">CAPTCHA site key is not configured locally. Enable Supabase CAPTCHA protection and set VITE_HCAPTCHA_SITE_KEY before public signup.</p> : null
           )}
 
           {!otpSent ? (

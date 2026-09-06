@@ -1,11 +1,11 @@
 {
   "name": "lokl-app",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "node scripts/production-preflight.cjs && tsc -b && vite build",
     "cap:sync": "cap sync",
     "cap:open:android": "cap open android",
     "cap:open:ios": "cap open ios",
@@ -14,7 +14,8 @@
     "preflight:production": "node scripts/production-preflight.cjs",
     "preview": "vite preview",
     "test:release": "npm exec --yes --package=@playwright/test -- sh -lc 'NODE_PATH=$(dirname $(dirname $(which playwright))) node scripts/release-e2e.cjs'",
-    "test:smoke": "npm exec --yes --package=@playwright/test -- sh -lc 'NODE_PATH=$(dirname $(dirname $(which playwright))) node scripts/smoke-e2e.cjs'"
+    "test:smoke": "npm exec --yes --package=@playwright/test -- sh -lc 'NODE_PATH=$(dirname $(dirname $(which playwright))) node scripts/smoke-e2e.cjs'",
+    "version:bump": "node scripts/version-bump.cjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.4.2",
@@ -54,5 +55,8 @@
     "tailwindcss": "^4.3.1",
     "typescript": "~6.0.2",
     "vite": "^8.1.0"
+  },
+  "overrides": {
+    "@xmldom/xmldom": "^0.9.12"
   }
 }

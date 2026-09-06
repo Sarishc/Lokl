@@ -1,6 +1,7 @@
 import { defaultSearchFilters, PAGE_SIZE } from '../lib/constants';
 import { getLegalConsent, LEGAL_CONSENT_VERSION } from '../lib/legal';
-import { hasSupabase, supabase } from '../lib/supabase';
+import '../lib/app-mode'; // runtime fail-fast guard — see src/lib/app-mode.ts
+import { supabase } from '../lib/supabase';
 import { uid, fileToDataUrl } from '../lib/utils';
 import { localDb } from './local-db';
 import type {
@@ -17,7 +18,7 @@ import type {
   UserProfile,
 } from '../types';
 
-const useMock = import.meta.env.VITE_APP_MODE !== 'supabase' || !hasSupabase;
+const useMock = __IS_MOCK_MODE__;
 const SUPABASE_SEARCH_LIMIT = 80;
 const OTP_DEVICE_KEY = 'lokl-otp-device-id';
 const OTP_ATTEMPTS_KEY = 'lokl-otp-attempts-v1';

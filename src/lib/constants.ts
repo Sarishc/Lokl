@@ -1,8 +1,8 @@
 import type { ListingCondition, RadiusOption, SearchFilters } from '../types';
+export { APP_MODE } from './app-mode';
 
 export const APP_NAME = 'Lokl';
 export const TAGLINE = 'Your neighbourhood marketplace';
-export const APP_MODE = (import.meta.env.VITE_APP_MODE || 'mock') as 'mock' | 'supabase';
 export const DEFAULT_PHONE_CODE = '+91';
 export const DEFAULT_CITY = 'Bengaluru';
 export const DEFAULT_LOCALITY = 'Koramangala';

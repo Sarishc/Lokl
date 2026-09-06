@@ -1,7 +1,15 @@
+// Single source of truth for the app version is /version.json at the repo root —
+// bump it with `npm run version:bump`, never edit versionCode/versionName here by
+// hand. See docs/audit/FINDINGS.md LOKL-030.
+def versionJsonFile = new File(rootDir, '../version.json')
+def versionJson = new groovy.json.JsonSlurper().parseText(versionJsonFile.text)
+
 ext {
     minSdkVersion = 24
     compileSdkVersion = 36
     targetSdkVersion = 36
+    appVersionName = versionJson.version
+    appVersionCode = versionJson.versionCode
     androidxActivityVersion = '1.11.0'
     androidxAppCompatVersion = '1.7.1'
     androidxCoordinatorLayoutVersion = '1.3.0'

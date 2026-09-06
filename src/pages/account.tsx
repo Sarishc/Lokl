@@ -146,12 +146,12 @@ export function ProfilePage() {
 
 export function AdminPage() {
   const user = useAppStore((state) => state.user);
-  const [authenticated, setAuthenticated] = useState(api.mode !== 'mock');
+  const [authenticated, setAuthenticated] = useState(!__IS_MOCK_MODE__);
   const [password, setPassword] = useState('');
   const [pendingAction, setPendingAction] = useState<{ title: string; body: string; label: string; action: () => Promise<void> } | null>(null);
   const reportsQuery = useQuery({ queryKey: ['admin-reports'], enabled: authenticated, queryFn: () => api.getReports() });
 
-  if (api.mode === 'supabase' && !user?.is_admin) {
+  if (!__IS_MOCK_MODE__ && !user?.is_admin) {
     return (
       <Page title="Admin access" subtitle="Moderation is protected server-side">
         <GlassCard className="space-y-4 p-5">
@@ -162,7 +162,7 @@ export function AdminPage() {
     );
   }
 
-  if (api.mode === 'mock' && !authenticated) {
+  if (__IS_MOCK_MODE__ && !authenticated) {
     return (
       <Page title="Admin access" subtitle="Basic moderation console">
         <GlassCard className="space-y-4 p-5">
