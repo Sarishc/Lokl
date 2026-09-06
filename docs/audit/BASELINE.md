@@ -36,6 +36,34 @@ Per-chunk breakdown (build output, uncompressed / gzip):
 | `android/app/build/outputs/bundle/release/app-release.aab` | 3,255,201 bytes (~3.1 MB) | **No** — confirmed via `jarsigner -verify`: "jar is unsigned." No `signingConfigs` block exists in `android/app/build.gradle`. |
 | iOS archive | N/A | Not attempted — no full Xcode.app on this machine (Command Line Tools only) |
 
+## Delivered size (what a user actually downloads) — added Step 3
+
+AAB size is not what any device downloads — Play generates per-device APK splits, so raw AAB size overstates the real install cost, especially once multi-ABI native libraries are involved. Measured with `bundletool` (official Google tool, `google/bundletool` GitHub releases; v1.18.1 used here) against the actual release AAB, signed for measurement purposes with the same keystore the real build uses:
+
+```bash
+java -jar bundletool.jar build-apks \
+  --bundle=android/app/build/outputs/bundle/release/app-release.aab \
+  --output=/tmp/release.apks \
+  --ks=android/app/release-verification.keystore.jks \
+  --ks-pass=pass:<store-password> \
+  --ks-key-alias=<key-alias> \
+  --key-pass=pass:<key-password> \
+  --overwrite
+
+java -jar bundletool.jar get-size total --apks=/tmp/release.apks
+# prints MIN,MAX delivered bytes across all device configs (mainly ABI splits)
+```
+
+Re-run this exact pair of commands against any future release AAB for an apples-to-apples comparison — `get-size total` reports the same MIN/MAX-across-device-configs metric every time, independent of which specific device eventually installs it.
+
+| Point in remediation | Commit | Delivered size (MIN–MAX across device configs) |
+|---|---|---|
+| Step 1 baseline (build-integrity fixes, no native plugins yet) | `fb5d436` | 2,983,620 – 3,026,872 bytes (~2.85–2.89 MB) |
+| Post-Step-2 (camera/geolocation/app plugins added, `minifyEnabled false`) | `e6e8f83` | 5,636,810 – 5,714,234 bytes (~5.38–5.45 MB) |
+| Post-Step-3 (same plugins, R8 + resource shrinking enabled) | `41f4b5a` | 1,929,624 – 1,974,468 bytes (~1.84–1.88 MB) |
+
+**Verdict**: adding real camera and geolocation capability was worth what it cost — once shrinking was actually turned on. Delivered size is now ~35% *smaller* than the Step 1 baseline, despite two genuine new native capabilities being added, because R8/resource shrinking claws back not just the plugins' own footprint (unused Kotlin stdlib classes, unused CameraX code paths) but previously-unshrunk AndroidX/Capacitor bulk that Step 1's build never benefited from either (it also had `minifyEnabled false`). The size regression was real and significant while shrinking was off (Step 2: +92% over baseline) — it just wasn't the plugins' fault so much as shrinking never having been enabled in the first place.
+
 ## Android permissions currently declared
 
 Source: `android/app/src/main/AndroidManifest.xml` (full file).

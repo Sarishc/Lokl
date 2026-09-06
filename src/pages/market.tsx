@@ -995,7 +995,24 @@ export function ChatDetailPage() {
         <div className="mb-3 flex gap-2 overflow-x-auto pb-1">{quickReplies.map((reply) => <Pill key={reply} onClick={() => setMessage(reply.replace('[price]', String(listing?.price || '')))}>{reply.replace('[price]', String(listing?.price || ''))}</Pill>)}</div>
         <div className="mb-3 grid grid-cols-2 gap-3">
           <SecondaryButton onClick={() => setShowOffer(true)}>Make an Offer</SecondaryButton>
-          <SecondaryButton onClick={async () => { const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*'; input.onchange = async () => { const file = input.files?.[0]; if (!file) return; setImageUploading(true); try { const imageUrl = await api.uploadImage(await compressImage(file), 'chat-images'); sendMessage.mutate({ content: imageUrl, type: 'image' }); } catch (error) { toast.error('Couldn’t share image', { description: error instanceof Error ? error.message : 'Try a JPG or PNG image.' }); } finally { setImageUploading(false); } }; input.click(); }}>{imageUploading ? 'Uploading...' : 'Share image'}</SecondaryButton>
+          <ImagePicker
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-[color:var(--color-line)] bg-[color:var(--color-field)] px-4 text-sm font-semibold text-[color:var(--color-text-primary)] shadow-[0_10px_24px_rgba(0,0,0,0.18)] transition hover:-translate-y-0.5 hover:bg-[color:var(--color-field-strong)] disabled:cursor-not-allowed disabled:opacity-45"
+            onFiles={async ([file]) => {
+              setImageUploading(true);
+              try {
+                const imageUrl = await api.uploadImage(await compressImage(file), 'chat-images');
+                sendMessage.mutate({ content: imageUrl, type: 'image' });
+              } catch (error) {
+                toast.error('Couldn’t share image', { description: error instanceof Error ? error.message : 'Try a JPG or PNG image.' });
+              } finally {
+                setImageUploading(false);
+              }
+            }}
+            onDenied={(source) => toast.error(source === 'camera' ? 'Camera access denied' : 'Photo library access denied', { description: 'Allow access in Settings, or try the other option.' })}
+            onError={(message) => toast.error('Couldn’t use that photo', { description: message })}
+          >
+            {imageUploading ? 'Uploading...' : 'Share image'}
+          </ImagePicker>
         </div>
         <div className="flex items-end gap-3">
           <textarea value={message} onChange={(event) => { setMessage(event.target.value); api.setTyping(chat.id, user.id); }} placeholder="Type a message" className="min-h-[48px] flex-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-3" />

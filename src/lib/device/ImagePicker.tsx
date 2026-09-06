@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { takePhoto, chooseFromLibrary, type ImagePickResult } from './image';
 
@@ -33,6 +33,7 @@ export function ImagePicker({
   onError?: (message: string) => void;
 }) {
   const [sheetOpen, setSheetOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   function handleResult(result: ImagePickResult) {
     if (result.status === 'ok') onFiles(result.files);
@@ -42,14 +43,21 @@ export function ImagePicker({
   }
 
   if (!Capacitor.isNativePlatform()) {
-    // Web: byte-for-byte the same <input type="file"> markup and onChange wiring
-    // this replaces, so scripts/smoke-e2e.cjs and scripts/release-e2e.cjs — which
-    // locate this element directly via input[type="file"][accept="image/*"] /
-    // input[type="file"][multiple] — keep passing without modification.
+    // Web: a real <button> (not a <label>) triggering a click on an always-present
+    // <input type="file"> via ref — chosen over a label wrapper specifically
+    // because one call site's e2e test (release-e2e.cjs's chat image share)
+    // queries getByRole('button', ...) + waitForEvent('filechooser'), which a
+    // <label> wrapper doesn't satisfy (no implicit button role). The input's
+    // attributes are otherwise unchanged from before this migration, so the
+    // other three call sites' input[type="file"][accept="image/*"] /
+    // input[type="file"][multiple] locators in scripts/smoke-e2e.cjs and
+    // scripts/release-e2e.cjs keep passing too. A real button is also more
+    // accessible than a label-wrapping-a-hidden-input to begin with.
     return (
-      <label className={className}>
+      <button type="button" className={className} onClick={() => inputRef.current?.click()}>
         {children}
         <input
+          ref={inputRef}
           type="file"
           accept={accept}
           multiple={multiple}
@@ -60,7 +68,7 @@ export function ImagePicker({
             if (files.length) onFiles(files);
           }}
         />
-      </label>
+      </button>
     );
   }
 

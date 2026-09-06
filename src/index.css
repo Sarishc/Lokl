@@ -69,14 +69,12 @@ a {
 }
 
 button:not(:disabled),
-a,
-label:has(input[type='file']) {
+a {
   transition: transform 150ms ease, border-color 150ms ease, background-color 150ms ease, opacity 150ms ease, filter 150ms ease;
 }
 
 button:not(:disabled):active,
-a:active,
-label:has(input[type='file']):active {
+a:active {
   transform: translateY(1px) scale(0.98);
 }
 
@@ -91,8 +89,7 @@ label:has(input[type='file']):active {
   }
 
   button:not(:disabled):active,
-  a:active,
-  label:has(input[type='file']):active {
+  a:active {
     transform: none;
   }
 }
