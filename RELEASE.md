@@ -85,12 +85,43 @@ Native wrapper preparation has started with Capacitor:
 - `npm run cap:open:ios`
 - `npm run cap:open:android`
 - Android debug APK: `android/app/build/outputs/apk/debug/app-debug.apk`
-- Android release bundle: `android/app/build/outputs/bundle/release/app-release.aab`
+- Android release bundle (signed, R8-shrunk): `android/app/build/outputs/bundle/release/app-release.aab`
+- Android release APK (signed, R8-shrunk): `android/app/build/outputs/apk/release/app-release.apk`
+
+### Android release signing
+
+`android/app/build.gradle` reads release signing credentials from outside version control — never from anything committed. Two supported sources, checked in this order (properties file first, then env var, per credential):
+
+1. `android/keystore.properties` (gitignored — copy `android/keystore.properties.example` and fill in real values). Use this for local builds.
+2. Environment variables of the same four names — `RELEASE_STORE_FILE`, `RELEASE_STORE_PASSWORD`, `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD`. Use this for CI; do not write a properties file to disk in a CI job.
+
+`RELEASE_STORE_FILE` is resolved relative to `android/`.
+
+**Real production keystore**: this repo does not contain one, and Step 3 of the remediation did not generate one — only a clearly-labeled, gitignored, verification-only throwaway keystore (`android/app/release-verification.keystore.jks`, CN "Lokl Verification Only, Do Not Use For Real Release") used solely to prove the signing mechanism itself works end to end. **Generate a real keystore before ever uploading to Play**, e.g.:
+
+```bash
+keytool -genkeypair -v -keystore android/release.keystore.jks \
+  -alias <your-key-alias> -keyalg RSA -keysize 2048 -validity 10000
+```
+
+Store the real keystore file and its passwords somewhere durable and backed up outside this repo (a password manager, a secrets vault) — **losing it means you can never publish an update to an app already live on Play under that signing identity.** If Play App Signing is enabled for this app (recommended, and mandatory for new apps on Play as of recent policy), Google holds the actual distribution key and this upload keystore only needs to survive long enough to complete enrollment.
+
+If signing credentials are missing, `bundleRelease`/`assembleRelease` fail immediately with a clear error rather than silently producing an unsigned artifact — verify signing worked with:
+
+```bash
+jarsigner -verify -verbose -certs android/app/build/outputs/bundle/release/app-release.aab
+apksigner verify --print-certs android/app/build/outputs/apk/release/app-release.apk
+```
+
+### Android R8 / resource shrinking
+
+The release build type has `minifyEnabled true` and `shrinkResources true` (Step 3; previously `false`, see `docs/audit/FINDINGS.md` LOKL-010). Capacitor's own bundled consumer ProGuard rules (from the `@capacitor/android` AAR) already keep every Capacitor plugin class; no additional keep rules were added speculatively for `@capacitor/geolocation`, `@capacitor/camera`, or `@capacitor/app` since none of the three ships its own consumer rules to duplicate. **A successful `bundleRelease` only proves R8 didn't crash at build time — it does not prove nothing reflective broke at runtime.** That can only be confirmed by running the full scenario list on a signed release build installed on a real device (see the Step 3 report's device-verification section). If a Capacitor plugin call throws `"not implemented"` or similar only in the release build, start here.
 
 Still required before App Store / Play Store submission:
 
 1. Install and select full Xcode, then archive the iOS app.
-2. Configure Apple bundle signing and Google Play signing.
+2. Generate a real production Android signing keystore (see above) and configure Apple bundle signing.
 3. Replace default Capacitor native icons/splash screens with final Lokl assets.
 4. Configure native permissions, iOS privacy manifests, Android data safety, app screenshots, support URLs, age/content ratings, and TestFlight/internal testing.
 5. Resolve production preflight blockers and run live Google/OTP/image-upload QA against the final production project.
+6. Run the full device-verification scenario list (Step 3 of the remediation) on a real, signed release build on a physical Android device — not yet done anywhere; no device was available during the remediation itself.

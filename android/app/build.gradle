@@ -1,5 +1,37 @@
 apply plugin: 'com.android.application'
 
+// Release signing: credentials come from outside version control, either an
+// android/keystore.properties file (gitignored — see keystore.properties.example
+// for the template) or environment variables of the same names (used by CI).
+// Never both a real keystore path and its passwords committed together — see
+// docs/audit/FINDINGS.md LOKL-015 and RELEASE.md for the full setup.
+def keystorePropertiesFile = rootProject.file('keystore.properties')
+def keystoreProperties = new Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+def releaseStoreFile = keystoreProperties.getProperty('RELEASE_STORE_FILE') ?: System.getenv('RELEASE_STORE_FILE')
+def releaseStorePassword = keystoreProperties.getProperty('RELEASE_STORE_PASSWORD') ?: System.getenv('RELEASE_STORE_PASSWORD')
+def releaseKeyAlias = keystoreProperties.getProperty('RELEASE_KEY_ALIAS') ?: System.getenv('RELEASE_KEY_ALIAS')
+def releaseKeyPassword = keystoreProperties.getProperty('RELEASE_KEY_PASSWORD') ?: System.getenv('RELEASE_KEY_PASSWORD')
+def hasReleaseSigningConfig = releaseStoreFile && releaseStorePassword && releaseKeyAlias && releaseKeyPassword
+
+// Fail the build with a clear message rather than silently emitting an unsigned
+// release artifact — the same fail-loudly standard Step 1 set for the web build.
+gradle.taskGraph.whenReady { taskGraph ->
+    def buildingReleaseArtifact = taskGraph.allTasks.any {
+        it.name in ['assembleRelease', 'bundleRelease', 'signReleaseBundle', 'packageRelease']
+    }
+    if (buildingReleaseArtifact && !hasReleaseSigningConfig) {
+        throw new GradleException(
+            'Release build requested but signing credentials are missing.\n' +
+            'Set RELEASE_STORE_FILE, RELEASE_STORE_PASSWORD, RELEASE_KEY_ALIAS, RELEASE_KEY_PASSWORD\n' +
+            'as environment variables, or create android/keystore.properties from\n' +
+            'android/keystore.properties.example. Refusing to produce an unsigned release artifact.'
+        )
+    }
+}
+
 android {
     namespace = "com.lokl.app"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -16,9 +48,33 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (hasReleaseSigningConfig) {
+                storeFile rootProject.file(releaseStoreFile)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
+    }
     buildTypes {
         release {
-            minifyEnabled false
+            if (hasReleaseSigningConfig) {
+                signingConfig signingConfigs.release
+            }
+            // R8 + resource shrinking. Capacitor's own consumer rules
+            // (node_modules/@capacitor/android/capacitor/proguard-rules.pro, merged
+            // automatically from the AAR) already keep every class extending
+            // com.getcapacitor.Plugin and every @CapacitorPlugin-annotated method —
+            // that covers @capacitor/geolocation, @capacitor/camera, and
+            // @capacitor/app, none of which ship additional consumer rules of their
+            // own (checked their AARs directly — none exist to duplicate). No
+            // extra keep rules added speculatively; see docs/audit/FINDINGS.md
+            // LOKL-010 and the Step 3 report for why this can only be fully proven
+            // by an on-device run, not by a successful build.
+            minifyEnabled true
+            shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
