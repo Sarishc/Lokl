@@ -8,6 +8,7 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -57,7 +58,7 @@ jobs:
       - name: Start mock-mode dev server
         run: |
           VITE_APP_MODE=mock npx vite --port 5173 --strictPort &
-          npx wait-on http://127.0.0.1:5173
+          npx wait-on http://localhost:5173
 
       - name: Smoke e2e (mock mode)
         env:

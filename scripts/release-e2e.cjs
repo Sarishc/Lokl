@@ -34,6 +34,10 @@ async function completeOnboardingIfVisible(page) {
   if (!onboardingVisible) return false;
   await page.getByPlaceholder('Your full name').fill('Release Tester');
   await page.getByPlaceholder(/Tell your neighbours/).fill('Testing Lokl release flows.');
+  // Step 2: locality/city are no longer pre-filled (see docs/audit/FINDINGS.md
+  // LOKL-031) — Finish onboarding stays disabled until both are set.
+  await page.getByPlaceholder('Koramangala').fill('Koramangala');
+  await page.getByPlaceholder('Bengaluru').fill('Bengaluru');
   await page.getByRole('button', { name: /finish onboarding/i }).click();
   await page.waitForLoadState('networkidle');
   await page.getByText(/items nearby/i).waitFor({ state: 'visible', timeout: 10_000 });

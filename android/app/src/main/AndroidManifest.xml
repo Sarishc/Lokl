@@ -38,4 +38,19 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Geolocation: coarse only. The feed and search are radius-based (1-25 km
+         presets, see src/lib/constants.ts radiusOptions) and never need
+         street-level accuracy, so we deliberately do not request
+         ACCESS_FINE_LOCATION — coarse (~2 km, network/wifi-based) is enough to
+         resolve a locality, is easier to justify in the Play Data Safety form,
+         and grants at a higher rate. See docs/audit/FINDINGS.md LOKL-003. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
+
+    <!-- No CAMERA or storage permission is declared here: @capacitor/camera
+         launches the system camera/gallery apps via intent (see its own bundled
+         <queries> block) rather than accessing hardware directly, and this app
+         never sets saveToGallery, so the plugin's storage-permission path is
+         never exercised either. -->
 </manifest>

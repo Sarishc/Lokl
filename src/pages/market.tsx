@@ -10,6 +10,7 @@ import { ApproximateMap, ListingsMap } from '../components/maps';
 import { Avatar, ChatRow, EmptyState, FallbackImage, GlassCard, ListingCard, NotificationBell, Page, Pill, PrimaryButton, SecondaryButton, SkeletonCard, StatChip } from '../components/common';
 import { categoryIconFor, conditionIconFor } from '../lib/chip-icons';
 import { categories, conditionOptions, defaultSearchFilters, listingFilterPresets, quickReplies, safetyTips, trendingSearchesByCity } from '../lib/constants';
+import { ImagePicker } from '../lib/device';
 import { clamp, cn, compressImage, currency, formatChatTime, groupDateLabel, timeAgo, vibrate } from '../lib/utils';
 import { api } from '../services/api';
 import { useAppStore } from '../store/app-store';
@@ -134,6 +135,7 @@ function LocationRadiusSheet({ user, radius, onChangeRadius, onClose }: { user: 
 export function HomePage() {
   const reduceMotion = useReducedMotion();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const user = useAppStore((state) => state.user);
   const radius = useAppStore((state) => state.radius);
   const setRadius = useAppStore((state) => state.setRadius);
@@ -149,7 +151,7 @@ export function HomePage() {
 
   const feed = useInfiniteQuery({
     queryKey: ['feed', user?.id, feedFilters],
-    enabled: Boolean(user),
+    enabled: Boolean(user?.locality),
     initialPageParam: 0,
     queryFn: ({ pageParam }) => api.getFeed(user!.location_lat, user!.location_lng, feedFilters, Number(pageParam)),
     getNextPageParam: (lastPage) => lastPage.nextCursor,
@@ -172,6 +174,25 @@ export function HomePage() {
   });
 
   if (!user) return null;
+
+  // A user with no known locality must be told so, not silently shown another
+  // city's listings as though they were local — see docs/audit/FINDINGS.md
+  // LOKL-031. `locality` is this app's "we know where you are" signal (see
+  // src/services/api.ts upsertUserProfileFromAuth and src/pages/auth.tsx
+  // OnboardingPage); an empty one means the user skipped or was denied location
+  // during onboarding.
+  if (!user.locality) {
+    return (
+      <div className="px-4 pt-6">
+        <EmptyState
+          title="We don't know your neighbourhood yet"
+          body="Set your locality so we can show you listings near you, instead of guessing."
+          icon={<MapPinned size={28} />}
+          action={<PrimaryButton onClick={() => navigate('/onboarding')}>Set your location</PrimaryButton>}
+        />
+      </div>
+    );
+  }
 
   const runRefresh = async () => {
     setIsPullRefreshing(true);
@@ -340,6 +361,7 @@ function SearchFilterSheet({ open, filters, onClose, onApply }: { open: boolean;
 
 export function ExplorePage() {
   const reduceMotion = useReducedMotion();
+  const navigate = useNavigate();
   const user = useAppStore((state) => state.user);
   const searchFilters = useAppStore((state) => state.searchFilters);
   const setSearchFilters = useAppStore((state) => state.setSearchFilters);
@@ -351,12 +373,12 @@ export function ExplorePage() {
 
   const searchQuery = useQuery({
     queryKey: ['search', query, searchFilters, user?.id],
-    enabled: Boolean(user),
+    enabled: Boolean(user?.locality),
     queryFn: () => api.searchListings(query, searchFilters, user!.location_lat, user!.location_lng),
   });
 
   const results = searchQuery.data ?? [];
-  const trending = trendingSearchesByCity[user?.city || 'Bengaluru'] || trendingSearchesByCity.Bengaluru;
+  const trending = trendingSearchesByCity[user?.city || ''] || [];
 
   useEffect(() => {
     if (!query.trim()) return;
@@ -365,6 +387,22 @@ export function ExplorePage() {
   }, [query]);
 
   if (!user) return null;
+
+  // Same rationale as HomePage — see docs/audit/FINDINGS.md LOKL-031. Search is
+  // just as location-dependent (distance sort, trending-by-city) as the feed, so
+  // it needs the same guard rather than silently searching from Koramangala.
+  if (!user.locality) {
+    return (
+      <div className="px-4 pt-6">
+        <EmptyState
+          title="We don't know your neighbourhood yet"
+          body="Set your locality so search and trending results are for your area, not a guess."
+          icon={<MapPinned size={28} />}
+          action={<PrimaryButton onClick={() => navigate('/onboarding')}>Set your location</PrimaryButton>}
+        />
+      </div>
+    );
+  }
 
   return (
     <Page title="Explore" subtitle="Search fast, then switch to map when you want a quick scan">
@@ -706,28 +744,26 @@ export function SellPage() {
         {step === 1 && (
           <div>
             <div className="text-sm text-[color:var(--color-text-muted)]">Upload up to 8 photos. We automatically compress every image below 500KB for faster loading.</div>
-            <label className="mt-4 flex min-h-[180px] flex-col items-center justify-center rounded-3xl border border-dashed border-white/10 bg-white/5 px-6 text-center">
+            <ImagePicker
+              className="mt-4 flex min-h-[180px] flex-col items-center justify-center rounded-3xl border border-dashed border-white/10 bg-white/5 px-6 text-center"
+              multiple
+              limit={8 - draft.uploadedImages.length}
+              onFiles={async (files) => {
+                try {
+                  const selected = files.slice(0, 8 - draft.uploadedImages.length);
+                  const compressed = await Promise.all(selected.map(async (file) => api.uploadImage(await compressImage(file), 'listings')));
+                  updateDraft({ uploadedImages: [...draft.uploadedImages, ...compressed].slice(0, 8) });
+                } catch (error) {
+                  toast.error('Couldn’t upload photos', { description: error instanceof Error ? error.message : 'Try a JPG or PNG image.' });
+                }
+              }}
+              onDenied={(source) => toast.error(source === 'camera' ? 'Camera access denied' : 'Photo library access denied', { description: 'Allow access in Settings, or try the other option.' })}
+              onError={(message) => toast.error('Couldn’t use that photo', { description: message })}
+            >
               <ImagePlus className="mb-2 text-[color:var(--color-primary)]" size={34} />
               <div className="font-medium">Add photos from camera or gallery</div>
               <div className="mt-1 text-sm text-[color:var(--color-text-muted)]">First photo becomes your cover image.</div>
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                className="hidden"
-                onChange={async (event) => {
-                  try {
-                    const files = Array.from(event.target.files || []).slice(0, 8 - draft.uploadedImages.length);
-                    const compressed = await Promise.all(files.map(async (file) => api.uploadImage(await compressImage(file), 'listings')));
-                    updateDraft({ uploadedImages: [...draft.uploadedImages, ...compressed].slice(0, 8) });
-                  } catch (error) {
-                    toast.error('Couldn’t upload photos', { description: error instanceof Error ? error.message : 'Try a JPG or PNG image.' });
-                  } finally {
-                    event.target.value = '';
-                  }
-                }}
-              />
-            </label>
+            </ImagePicker>
             {draft.uploadedImages.length ? <div className="mt-4 grid grid-cols-4 gap-2">{draft.uploadedImages.map((image, index) => <div key={`${image}-${index}`} className="relative aspect-square overflow-hidden rounded-2xl"><img src={image} alt="draft" className="h-full w-full object-cover" /><button onClick={() => updateDraft({ uploadedImages: draft.uploadedImages.filter((_, itemIndex) => itemIndex !== index) })} className="absolute right-1 top-1 grid h-7 w-7 place-items-center rounded-full bg-black/60"><X size={14} /></button></div>)}</div> : null}
           </div>
         )}

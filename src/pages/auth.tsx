@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { Page, GlassCard, PrimaryButton, SecondaryButton } from '../components/common';
 import { APP_NAME, DEFAULT_PHONE_CODE, TAGLINE } from '../lib/constants';
 import { getLegalConsent, LEGAL_CONSENT_VERSION, recordLegalConsent } from '../lib/legal';
+import { getCurrentLocation, ImagePicker } from '../lib/device';
 import { vibrate } from '../lib/utils';
 import { api } from '../services/api';
 import { useAppStore } from '../store/app-store';
@@ -252,20 +253,35 @@ export function OnboardingPage() {
   const [bio, setBio] = useState(user?.bio || '');
   const [avatar, setAvatar] = useState(user?.avatar_url || '');
   const [phone, setPhone] = useState(user?.phone || '');
-  const [locality, setLocality] = useState(user?.locality || 'Koramangala');
-  const [city, setCity] = useState(user?.city || 'Bengaluru');
+  // Deliberately not defaulted to Koramangala/Bengaluru — an untouched onboarding
+  // form must submit "we don't know," not a fake real place. See
+  // docs/audit/FINDINGS.md LOKL-031 and the Step 2 report's Task 5 write-up.
+  const [locality, setLocality] = useState(user?.locality || '');
+  const [city, setCity] = useState(user?.city || '');
   const [coords, setCoords] = useState({ lat: user?.location_lat || 12.9352, lng: user?.location_lng || 77.6245 });
+  const [detecting, setDetecting] = useState(false);
 
   const detectLocation = async () => {
-    if (!navigator.geolocation) return toast.error('Location detection is unavailable', { description: 'Enter your locality and city manually to continue.' });
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setCoords({ lat: position.coords.latitude, lng: position.coords.longitude });
-        toast.success('Location detected', { description: 'You can still change locality manually.' });
-      },
-      () => toast.error('Couldn’t detect location', { description: 'Allow location access or enter your locality manually.' }),
-      { enableHighAccuracy: true },
-    );
+    setDetecting(true);
+    try {
+      const result = await getCurrentLocation();
+      if (result.status === 'granted') {
+        setCoords({ lat: result.latitude, lng: result.longitude });
+        toast.success('Location detected', { description: 'Enter your locality and city below to match it.' });
+      } else if (result.status === 'denied') {
+        toast.error('Location access denied', { description: 'You can try again, or just enter your locality and city manually below.' });
+      } else if (result.status === 'denied-permanently') {
+        toast.error('Location access is turned off for Lokl', { description: 'Enable it for Lokl in your device Settings, or enter your locality and city manually below.' });
+      } else if (result.status === 'disabled') {
+        toast.error('Location services are off', { description: 'Turn on location services for this device in Settings, or enter your locality and city manually below.' });
+      } else if (result.status === 'timeout') {
+        toast.error('Couldn’t get a location fix in time', { description: 'Try again, or enter your locality and city manually below.' });
+      } else {
+        toast.error('Couldn’t detect location', { description: result.message || 'Enter your locality and city manually below.' });
+      }
+    } finally {
+      setDetecting(false);
+    }
   };
 
   const saveProfile = useMutation({
@@ -297,19 +313,14 @@ export function OnboardingPage() {
     <Page title="Complete your profile" subtitle="Set up your trusted neighbourhood identity" right={<button onClick={() => navigate(-1)} className="grid h-11 w-11 place-items-center rounded-2xl border border-white/10 bg-white/5"><ChevronLeft size={18} /></button>}>
       <GlassCard className="space-y-5 p-5">
         <div className="flex items-center gap-4">
-          <label className="relative grid h-20 w-20 place-items-center overflow-hidden rounded-[28px] border border-dashed border-white/15 bg-white/5">
+          <ImagePicker
+            className="relative grid h-20 w-20 place-items-center overflow-hidden rounded-[28px] border border-dashed border-white/15 bg-white/5"
+            onFiles={async ([file]) => setAvatar(await api.uploadImage(file, 'avatars'))}
+            onDenied={(source) => toast.error(source === 'camera' ? 'Camera access denied' : 'Photo library access denied', { description: 'Allow access in Settings, or try the other option.' })}
+            onError={(message) => toast.error('Couldn’t use that photo', { description: message })}
+          >
             {avatar ? <img src={avatar} alt="Avatar" className="h-full w-full object-cover" /> : <Camera className="text-[color:var(--color-text-muted)]" />}
-            <input
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={async (event) => {
-                const file = event.target.files?.[0];
-                if (!file) return;
-                setAvatar(await api.uploadImage(file, 'avatars'));
-              }}
-            />
-          </label>
+          </ImagePicker>
           <div>
             <h3 className="font-semibold">Upload profile photo</h3>
             <p className="mt-1 text-sm text-[color:var(--color-text-muted)]">A real face boosts trust and replies.</p>
@@ -344,10 +355,10 @@ export function OnboardingPage() {
         <div className="rounded-2xl border border-white/8 bg-white/5 p-4">
           <div className="mb-2 flex items-center gap-2 text-sm font-medium"><MapPin size={16} className="text-[color:var(--color-secondary)]" /> Use current location</div>
           <p className="text-sm text-[color:var(--color-text-muted)]">Auto-detect coordinates for better distance sorting. You stay in control of the displayed locality.</p>
-          <SecondaryButton className="mt-3" onClick={detectLocation}>Detect location</SecondaryButton>
+          <SecondaryButton className="mt-3" onClick={detectLocation} disabled={detecting}>{detecting ? 'Detecting…' : 'Detect location'}</SecondaryButton>
         </div>
 
-        <PrimaryButton className="w-full" onClick={() => saveProfile.mutate()} disabled={!fullName.trim() || saveProfile.isPending}>
+        <PrimaryButton className="w-full" onClick={() => saveProfile.mutate()} disabled={!fullName.trim() || !locality.trim() || !city.trim() || saveProfile.isPending}>
           {saveProfile.isPending ? 'Saving profile...' : 'Finish onboarding'}
         </PrimaryButton>
       </GlassCard>

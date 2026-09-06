@@ -104,10 +104,12 @@ export const localDb = {
         full_name: '',
         avatar_url: '',
         bio: '',
+        // Deliberately not Koramangala/Bengaluru — see src/services/api.ts
+        // upsertUserProfileFromAuth and docs/audit/FINDINGS.md LOKL-031.
         location_lat: 12.9352,
         location_lng: 77.6245,
-        locality: 'Koramangala',
-        city: 'Bengaluru',
+        locality: '',
+        city: '',
         is_verified: true,
         is_dealer: false,
         is_admin: false,
@@ -136,10 +138,12 @@ export const localDb = {
         full_name: '',
         avatar_url: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=200&q=80',
         bio: '',
+        // Deliberately not Koramangala/Bengaluru — see src/services/api.ts
+        // upsertUserProfileFromAuth and docs/audit/FINDINGS.md LOKL-031.
         location_lat: 12.9352,
         location_lng: 77.6245,
-        locality: 'Koramangala',
-        city: 'Bengaluru',
+        locality: '',
+        city: '',
         is_verified: true,
         is_dealer: false,
         is_admin: false,
@@ -221,7 +225,7 @@ export const localDb = {
     };
   },
 
-  searchListings(query: string, filters: SearchFilters = defaultSearchFilters, userLat = 12.9352, userLng = 77.6245) {
+  searchListings(query: string, filters: SearchFilters = defaultSearchFilters, userLat: number, userLng: number) {
     const db = readDb();
     const normalized = query.trim().toLowerCase();
     const results = db.listings

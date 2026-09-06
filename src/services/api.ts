@@ -61,10 +61,15 @@ async function upsertUserProfileFromAuth() {
     full_name: '',
     avatar_url: avatarUrl,
     bio: '',
+    // Deliberately not Koramangala/Bengaluru — an empty locality is this app's
+    // "we don't know where you are yet" signal (see src/pages/market.tsx HomePage
+    // and docs/audit/FINDINGS.md LOKL-031). location_lat/lng keep the DB's inert
+    // numeric placeholder since making them nullable is a larger type migration
+    // than this fix needs — nothing reads them until locality is non-empty.
     location_lat: 12.9352,
     location_lng: 77.6245,
-    locality: 'Koramangala',
-    city: 'Bengaluru',
+    locality: '',
+    city: '',
     is_verified: true,
     is_dealer: false,
     is_admin: false,
@@ -270,7 +275,7 @@ export const api = {
     return { items, nextCursor: items.length === PAGE_SIZE ? cursor + PAGE_SIZE : null };
   },
 
-  async searchListings(query: string, filters: SearchFilters = defaultSearchFilters, userLat = 12.9352, userLng = 77.6245) {
+  async searchListings(query: string, filters: SearchFilters = defaultSearchFilters, userLat: number, userLng: number) {
     if (useMock) return localDb.searchListings(query, filters, userLat, userLng);
     const { data, error } = await supabase!.rpc('search_listings_nearby', {
       user_lat: userLat,

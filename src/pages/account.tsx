@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Camera, FileText, Heart, ListPlus, LogOut, MessageSquareText, ShieldAlert, ShieldCheck, Star, Trash2, WifiOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { Avatar, EmptyState, GlassCard, ListingCard, Page, Pill, PrimaryButton, SecondaryButton, SkeletonCard } from '../components/common';
+import { ImagePicker } from '../lib/device';
 import { timeAgo } from '../lib/utils';
 import { api } from '../services/api';
 import { useAppStore } from '../store/app-store';
@@ -92,11 +93,23 @@ export function ProfilePage() {
     <Page title="Profile" subtitle="Your trusted neighbourhood identity">
       <GlassCard className="space-y-4 p-4">
         <div className="flex items-start gap-4">
-          <label className="relative">
-            <Avatar user={{ ...user, avatar_url: editing ? form.avatar_url : user.avatar_url }} size={72} />
-            {editing ? <input type="file" accept="image/*" className="absolute inset-0 opacity-0" onChange={async (event) => { const file = event.target.files?.[0]; if (!file) return; const uploaded = await api.uploadImage(file, 'avatars'); setForm((value) => ({ ...value, avatar_url: uploaded })); }} /> : null}
-            <span className="absolute -bottom-1 -right-1 grid h-8 w-8 place-items-center rounded-full bg-[color:var(--color-primary)] text-white"><Camera size={14} /></span>
-          </label>
+          {editing ? (
+            <ImagePicker
+              className="relative"
+              inputClassName="absolute inset-0 opacity-0"
+              onFiles={async ([file]) => { const uploaded = await api.uploadImage(file, 'avatars'); setForm((value) => ({ ...value, avatar_url: uploaded })); }}
+              onDenied={(source) => toast.error(source === 'camera' ? 'Camera access denied' : 'Photo library access denied', { description: 'Allow access in Settings, or try the other option.' })}
+              onError={(message) => toast.error('Couldn’t use that photo', { description: message })}
+            >
+              <Avatar user={{ ...user, avatar_url: form.avatar_url }} size={72} />
+              <span className="absolute -bottom-1 -right-1 grid h-8 w-8 place-items-center rounded-full bg-[color:var(--color-primary)] text-white"><Camera size={14} /></span>
+            </ImagePicker>
+          ) : (
+            <span className="relative">
+              <Avatar user={user} size={72} />
+              <span className="absolute -bottom-1 -right-1 grid h-8 w-8 place-items-center rounded-full bg-[color:var(--color-primary)] text-white"><Camera size={14} /></span>
+            </span>
+          )}
           <div className="min-w-0 flex-1">
             {editing ? <input value={form.full_name} onChange={(event) => setForm((value) => ({ ...value, full_name: event.target.value }))} className="h-11 w-full rounded-2xl border border-white/10 bg-white/5 px-4" /> : <div className="flex items-center gap-2 text-xl font-bold">{user.full_name}{user.is_verified ? <span className="rounded-full bg-[color:var(--color-secondary)]/15 px-2 py-0.5 text-[10px] font-semibold text-[color:var(--color-secondary)]">Verified</span> : null}</div>}
             {editing ? <input value={form.locality} onChange={(event) => setForm((value) => ({ ...value, locality: event.target.value }))} className="mt-3 h-11 w-full rounded-2xl border border-white/10 bg-white/5 px-4" /> : <div className="mt-1 text-sm text-[color:var(--color-text-muted)]">{user.locality}, {user.city}</div>}
