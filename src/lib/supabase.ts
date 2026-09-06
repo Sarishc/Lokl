@@ -10,6 +10,16 @@ export const supabase = supabaseUrl && supabaseAnonKey
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: true,
+        // Explicit, not relying on the default: native Google sign-in
+        // (src/lib/device/oauth.ts) exchanges a PKCE code for a session via
+        // exchangeCodeForSession(), which auth-js's own docs say only applies
+        // "when flowType is set to pkce in client options." detectSessionInUrl
+        // stays on for the unchanged web redirect flow — it's simply never
+        // triggered by a native deep link, since that never navigates the
+        // WebView to a URL containing tokens; the native path calls
+        // exchangeCodeForSession explicitly instead. See the Step 4 report's
+        // Task 2 write-up.
+        flowType: 'pkce',
       },
     })
   : null;

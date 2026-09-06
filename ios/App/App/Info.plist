@@ -24,6 +24,20 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<!-- Native Google Sign-In redirect only (src/lib/device/oauth.ts,
+	     docs/audit/FINDINGS.md LOKL-006) — configuration only, added in Step 4
+	     without any iOS build work. This is a separate, permanent public interface
+	     from CapacitorConfig's server.iosScheme (the WebView's own origin, fixed in
+	     Step 1) — never point this at that scheme or vice versa. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.lokl.app</string>
+			</array>
+		</dict>
+	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Lokl uses your location to show you listings near your neighbourhood and to set your locality automatically when you post an item.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>

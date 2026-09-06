@@ -61,6 +61,10 @@ function BootstrappedApp() {
 
   useEffect(() => {
     api.getCurrentUser().then((user) => setUser(user));
+    api.initNativeGoogleOAuthListener(() => {
+      void api.getCurrentUser().then((user) => setUser(user));
+      void queryClient.invalidateQueries();
+    });
     const unsubscribe = api.subscribe((event) => {
       if (!event?.table) {
         void queryClient.invalidateQueries();

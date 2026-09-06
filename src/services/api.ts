@@ -1,7 +1,9 @@
+import { Capacitor } from '@capacitor/core';
 import { defaultSearchFilters, PAGE_SIZE } from '../lib/constants';
 import { getLegalConsent, LEGAL_CONSENT_VERSION } from '../lib/legal';
 import '../lib/app-mode'; // runtime fail-fast guard — see src/lib/app-mode.ts
 import { supabase } from '../lib/supabase';
+import { initNativeGoogleOAuthListener, signInWithGoogleNative } from '../lib/device';
 import { uid, fileToDataUrl } from '../lib/utils';
 import { localDb } from './local-db';
 import type {
@@ -201,6 +203,15 @@ export const api = {
 
   async signInWithGoogle() {
     if (useMock) return localDb.signInWithGoogle();
+    // Native: Google returns 403 disallowed_useragent for the embedded WebView this
+    // app runs in — see src/lib/device/oauth.ts. Web keeps the original browser
+    // redirect unchanged; a real browser isn't subject to that restriction.
+    if (Capacitor.isNativePlatform()) {
+      const result = await signInWithGoogleNative(supabase!);
+      if (result.status === 'ok') return upsertUserProfileFromAuth();
+      if (result.status === 'cancelled') return null;
+      throw new Error(result.message);
+    }
     const redirectTo = `${window.location.origin}/auth`;
     const { error } = await supabase!.auth.signInWithOAuth({
       provider: 'google',
@@ -208,6 +219,14 @@ export const api = {
     });
     if (error) throw error;
     return null;
+  },
+
+  // Registered once at app boot (src/App.tsx) — see
+  // src/lib/device/oauth.ts:initNativeGoogleOAuthListener for why this needs to be
+  // independent of any specific sign-in button press. No-op on web/mock.
+  initNativeGoogleOAuthListener(onSessionChange: () => void) {
+    if (useMock || !supabase) return;
+    initNativeGoogleOAuthListener(supabase, onSessionChange);
   },
 
   async logout() {

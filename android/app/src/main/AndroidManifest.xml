@@ -22,6 +22,20 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- Native Google Sign-In redirect only (src/lib/device/oauth.ts,
+                 docs/audit/FINDINGS.md LOKL-006). Scheme is the app's own reverse-DNS
+                 applicationId — deliberately chosen to avoid colliding with any other
+                 installed app's custom scheme, per Android's own convention for this.
+                 This is a separate, permanent public interface from
+                 capacitor.config.ts's server.androidScheme/iosScheme (the WebView's
+                 own origin) — never point this at that scheme or vice versa. -->
+            <intent-filter android:autoVerify="false">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="com.lokl.app" android:host="oauth-callback" />
+            </intent-filter>
+
         </activity>
 
         <provider
