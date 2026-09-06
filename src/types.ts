@@ -19,8 +19,11 @@ export interface UserProfile {
   full_name: string;
   avatar_url: string;
   bio: string;
-  location_lat: number;
-  location_lng: number;
+  // null means genuinely unknown — never a placeholder coordinate. See
+  // docs/audit/FINDINGS.md LOKL-038/042 and src/lib/localities.ts. Always set
+  // together with locality/city via the same trusted lookup, never independently.
+  location_lat: number | null;
+  location_lng: number | null;
   locality: string;
   city: string;
   is_verified: boolean;
@@ -157,8 +160,11 @@ export interface ListingDraft {
   is_free: boolean;
   locality: string;
   city: string;
-  location_lat: number;
-  location_lng: number;
+  // null while the seller hasn't chosen a locality yet — see LocalityPicker.
+  // Never null once a listing is actually submitted (enforced client-side by
+  // disabling submission, and server-side by listings.location_lat/lng NOT NULL).
+  location_lat: number | null;
+  location_lng: number | null;
 }
 
 export interface SessionUser {

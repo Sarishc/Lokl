@@ -6,6 +6,7 @@ import useEmblaCarousel from 'embla-carousel-react';
 import { currency, distanceKm, formatChatTime, getInitials, hoursSince, timeAgo } from '../lib/utils';
 import { cn } from '../lib/utils';
 import { categoryIconFor, chipIconForLabel, type ChipIcon } from '../lib/chip-icons';
+import { CITIES, localitiesForCity, type LocalityOption } from '../lib/localities';
 import type { Listing, UserProfile } from '../types';
 
 type ActionButtonProps = HTMLMotionProps<'button'> & { isLoading?: boolean };
@@ -169,7 +170,9 @@ export function ListingCard({ listing, saved, currentUser, onSave }: { listing: 
   const reduceMotion = useReducedMotion();
   const [emblaRef, emblaApi] = useEmblaCarousel({ loop: false, dragFree: false });
   const [selectedImage, setSelectedImage] = useState(0);
-  const distance = currentUser ? distanceKm(currentUser.location_lat, currentUser.location_lng, listing.location_lat, listing.location_lng) : null;
+  const distance = currentUser?.location_lat != null && currentUser?.location_lng != null
+    ? distanceKm(currentUser.location_lat, currentUser.location_lng, listing.location_lat, listing.location_lng)
+    : null;
   const imageCount = listing.images.length;
   const isNew = hoursSince(listing.created_at) < 2;
   const isHot = listing.views >= 100;
@@ -232,7 +235,10 @@ export function ListingCard({ listing, saved, currentUser, onSave }: { listing: 
           <div className="line-clamp-2 min-h-10 text-sm font-semibold leading-5 text-[color:var(--color-text-primary)]">{listing.title}</div>
           <div className="flex min-h-5 items-center gap-2">{listing.is_negotiable ? <span className="rounded-full bg-[color:var(--color-secondary)]/15 px-2 py-0.5 text-[10px] font-bold text-[color:var(--color-secondary)]">Negotiable</span> : <span className="text-muted text-[10px] font-medium">Firm price</span>}</div>
           <div className="text-muted space-y-1 text-xs">
-            <div>{distance ? `${distance} km away` : listing.locality}</div>
+            {/* Every stored coordinate is a locality centroid (see src/lib/localities.ts)
+                — never claim more precision than that. No decimals, and "same
+                locality" instead of a fake "0.0 km away" for a shared centroid. */}
+            <div>{distance === null ? listing.locality : distance < 1 ? `In ${listing.locality}` : `~${Math.round(distance)} km away`}</div>
             <div className="flex items-center justify-between gap-2"><span>{listing.locality}</span><span>{timeAgo(listing.created_at)}</span></div>
           </div>
         </div>
@@ -290,5 +296,68 @@ export function ChatRow({ thread, otherUser, listingTitle, listingImage, unreadC
         </div>
       </GlassCard>
     </Link>
+  );
+}
+
+// The only way a locality/city/coordinate triple enters this app from a picker
+// (as opposed to a real GPS fix) — see src/lib/localities.ts and
+// docs/audit/FINDINGS.md LOKL-038/042. Always sets all four fields together, so
+// a label and its coordinates can never desync the way free-text entry did.
+export function LocalityPicker({
+  city,
+  locality,
+  onChange,
+  className,
+}: {
+  city: string;
+  locality: string;
+  onChange: (value: LocalityOption) => void;
+  className?: string;
+}) {
+  const options = localitiesForCity(city || CITIES[0]);
+  // The <select> always shows a value (it falls back to options[0] visually below)
+  // — apply that same default into real state on first render too, so what's
+  // displayed and what actually gets submitted can never disagree, and so a user
+  // who's fine with the default isn't stuck unable to progress because onChange
+  // never fires for a selection that already matches what's shown.
+  useEffect(() => {
+    if (!locality && options[0]) onChange(options[0]);
+  }, [locality, options, onChange]);
+  return (
+    <div className={cn('grid grid-cols-2 gap-3', className)}>
+      <div>
+        <label className="text-sm text-[color:var(--color-text-muted)]">City</label>
+        <select
+          aria-label="City"
+          value={city || CITIES[0]}
+          onChange={(event) => {
+            const nextCity = event.target.value;
+            const first = localitiesForCity(nextCity)[0];
+            if (first) onChange(first);
+          }}
+          className="mt-2 h-12 w-full rounded-2xl border border-white/10 bg-white/5 px-4"
+        >
+          {CITIES.map((option) => (
+            <option key={option} value={option}>{option}</option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className="text-sm text-[color:var(--color-text-muted)]">Locality</label>
+        <select
+          aria-label="Locality"
+          value={locality || options[0]?.locality}
+          onChange={(event) => {
+            const found = options.find((option) => option.locality === event.target.value);
+            if (found) onChange(found);
+          }}
+          className="mt-2 h-12 w-full rounded-2xl border border-white/10 bg-white/5 px-4"
+        >
+          {options.map((option) => (
+            <option key={option.locality} value={option.locality}>{option.locality}</option>
+          ))}
+        </select>
+      </div>
+    </div>
   );
 }

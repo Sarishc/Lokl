@@ -7,7 +7,7 @@ import useEmblaCarousel from 'embla-carousel-react';
 import { ArrowLeft, BellOff, Check, ChevronDown, ChevronRight, CircleAlert, Filter, Heart, ImagePlus, MapPinned, MessageCircle, MoreHorizontal, RefreshCcw, SearchX, Send, Share2, SlidersHorizontal, Sparkles, Store, WifiOff, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { ApproximateMap, ListingsMap } from '../components/maps';
-import { Avatar, ChatRow, EmptyState, FallbackImage, GlassCard, ListingCard, NotificationBell, Page, Pill, PrimaryButton, SecondaryButton, SkeletonCard, StatChip } from '../components/common';
+import { Avatar, ChatRow, EmptyState, FallbackImage, GlassCard, ListingCard, LocalityPicker, NotificationBell, Page, Pill, PrimaryButton, SecondaryButton, SkeletonCard, StatChip } from '../components/common';
 import { categoryIconFor, conditionIconFor } from '../lib/chip-icons';
 import { categories, conditionOptions, defaultSearchFilters, listingFilterPresets, quickReplies, safetyTips, trendingSearchesByCity } from '../lib/constants';
 import { ImagePicker } from '../lib/device';
@@ -692,8 +692,10 @@ export function SellPage() {
           category: draft.category,
           condition: draft.condition,
           images: draft.uploadedImages,
-          location_lat: draft.location_lat,
-          location_lng: draft.location_lng,
+          // Non-null by construction: nextDisabled blocks reaching submit at all
+          // until LocalityPicker has set both (see docs/audit/FINDINGS.md LOKL-042).
+          location_lat: draft.location_lat!,
+          location_lng: draft.location_lng!,
           locality: draft.locality,
           city: draft.city,
         });
@@ -714,7 +716,7 @@ export function SellPage() {
   if (editListingQuery.isLoading) return <Page title="Loading listing"><SkeletonCard /></Page>;
   if (editListingQuery.isError) return <Page title="Edit listing"><EmptyState title="Couldn’t load listing" body="Check your connection and retry editing this listing." icon={<WifiOff size={28} />} action={<PrimaryButton onClick={() => editListingQuery.refetch()}>Retry edit</PrimaryButton>} /></Page>;
 
-  const nextDisabled = (step === 1 && draft.uploadedImages.length === 0) || (step === 2 && (!draft.title || !draft.description)) || (step === 3 && !draft.is_free && draft.price <= 0);
+  const nextDisabled = (step === 1 && draft.uploadedImages.length === 0) || (step === 2 && (!draft.title || !draft.description)) || (step === 3 && !draft.is_free && draft.price <= 0) || (step === 4 && (draft.location_lat == null || draft.location_lng == null));
   const validationHint =
     step === 1 && draft.uploadedImages.length === 0 ? 'Add at least one photo so buyers can judge the item quickly.' :
     step === 2 && (!draft.title || !draft.description) ? 'Add a title and description before pricing the listing.' :
@@ -815,15 +817,20 @@ export function SellPage() {
 
         {step === 4 && (
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div><label className="text-sm text-[color:var(--color-text-muted)]">Locality</label><input value={draft.locality} onChange={(event) => updateDraft({ locality: event.target.value })} className="mt-2 h-12 w-full rounded-2xl border border-white/10 bg-white/5 px-4" /></div>
-              <div><label className="text-sm text-[color:var(--color-text-muted)]">City</label><input value={draft.city} onChange={(event) => updateDraft({ city: event.target.value })} className="mt-2 h-12 w-full rounded-2xl border border-white/10 bg-white/5 px-4" /></div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><label className="text-sm text-[color:var(--color-text-muted)]">Latitude</label><input type="number" value={draft.location_lat} onChange={(event) => updateDraft({ location_lat: Number(event.target.value) })} className="mt-2 h-12 w-full rounded-2xl border border-white/10 bg-white/5 px-4" /></div>
-              <div><label className="text-sm text-[color:var(--color-text-muted)]">Longitude</label><input type="number" value={draft.location_lng} onChange={(event) => updateDraft({ location_lng: Number(event.target.value) })} className="mt-2 h-12 w-full rounded-2xl border border-white/10 bg-white/5 px-4" /></div>
-            </div>
-            <ApproximateMap lat={draft.location_lat} lng={draft.location_lng} locality={draft.locality} />
+            {/* No raw lat/lng entry — a listing's coordinates always come from a
+                picked locality's known centroid, never a user-typed number. See
+                docs/audit/FINDINGS.md LOKL-042c. Sellers post from wherever the
+                item actually is, not necessarily their home locality, so this is
+                editable per listing rather than locked to the seller's profile. */}
+            <p className="text-sm text-[color:var(--color-text-muted)]">Where is this item? Defaults to your own locality — change it if you're posting from somewhere else.</p>
+            <LocalityPicker
+              city={draft.city}
+              locality={draft.locality}
+              onChange={(option) => updateDraft({ city: option.city, locality: option.locality, location_lat: option.lat, location_lng: option.lng })}
+            />
+            {draft.location_lat != null && draft.location_lng != null ? (
+              <ApproximateMap lat={draft.location_lat} lng={draft.location_lng} locality={draft.locality} />
+            ) : null}
           </div>
         )}
 
@@ -858,7 +865,7 @@ export function ChatsPage() {
   const user = useAppStore((state) => state.user);
   const chatQuery = useQuery({ queryKey: ['chats', user?.id], enabled: Boolean(user), queryFn: () => api.getChats(user!.id), refetchInterval: 3000 });
   const usersQuery = useQuery({ queryKey: ['current-user'], enabled: Boolean(user), queryFn: () => api.getCurrentUser() });
-  const listingsQuery = useQuery({ queryKey: ['search', 'all-chats'], enabled: Boolean(user), queryFn: () => api.searchListings('', defaultSearchFilters, user!.location_lat, user!.location_lng) });
+  const listingsQuery = useQuery({ queryKey: ['search', 'all-chats'], enabled: Boolean(user?.locality), queryFn: () => api.searchListings('', defaultSearchFilters, user!.location_lat, user!.location_lng) });
 
   if (!user) return null;
   const chats = chatQuery.data ?? [];

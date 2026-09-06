@@ -1,8 +1,13 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { DEFAULT_LOCALITY, DEFAULT_RADIUS, defaultSearchFilters } from '../lib/constants';
+import { DEFAULT_RADIUS, defaultSearchFilters } from '../lib/constants';
 import type { FeedFilters, ListingDraft, RadiusOption, SearchFilters, UserProfile } from '../types';
 
+// Deliberately no locality/city/coordinate default here — see
+// docs/audit/FINDINGS.md LOKL-042b. setUser (below) re-seeds these from the
+// signed-in user's own profile immediately, and LocalityPicker auto-applies a
+// real default the first time it renders with none set (src/components/common.tsx)
+// — neither ever needs a fabricated real place to fall back to.
 const emptyDraft: ListingDraft = {
   images: [],
   uploadedImages: [],
@@ -13,10 +18,10 @@ const emptyDraft: ListingDraft = {
   price: 0,
   is_negotiable: true,
   is_free: false,
-  locality: 'Koramangala',
-  city: 'Bengaluru',
-  location_lat: 12.9352,
-  location_lng: 77.6245,
+  locality: '',
+  city: '',
+  location_lat: null,
+  location_lng: null,
 };
 
 interface AppState {
@@ -42,12 +47,12 @@ export const useAppStore = create<AppState>()(
       radius: DEFAULT_RADIUS,
       feedFilters: { preset: 'all', radius: DEFAULT_RADIUS },
       searchFilters: defaultSearchFilters,
-      selectedLocality: DEFAULT_LOCALITY,
+      selectedLocality: '',
       draft: emptyDraft,
       setUser: (user) =>
         set(() => ({
           user,
-          selectedLocality: user?.locality ?? DEFAULT_LOCALITY,
+          selectedLocality: user?.locality ?? '',
           draft: user
             ? {
                 ...emptyDraft,

@@ -5,9 +5,10 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import HCaptcha from '@hcaptcha/react-hcaptcha';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Page, GlassCard, PrimaryButton, SecondaryButton } from '../components/common';
+import { Page, GlassCard, LocalityPicker, PrimaryButton, SecondaryButton } from '../components/common';
 import { APP_NAME, DEFAULT_PHONE_CODE, TAGLINE } from '../lib/constants';
 import { getLegalConsent, LEGAL_CONSENT_VERSION, recordLegalConsent } from '../lib/legal';
+import { nearestLocality } from '../lib/localities';
 import { getCurrentLocation, ImagePicker } from '../lib/device';
 import { vibrate } from '../lib/utils';
 import { api } from '../services/api';
@@ -255,10 +256,15 @@ export function OnboardingPage() {
   const [phone, setPhone] = useState(user?.phone || '');
   // Deliberately not defaulted to Koramangala/Bengaluru — an untouched onboarding
   // form must submit "we don't know," not a fake real place. See
-  // docs/audit/FINDINGS.md LOKL-031 and the Step 2 report's Task 5 write-up.
+  // docs/audit/FINDINGS.md LOKL-031/038/042 and the Step 5 report's Task 2/3
+  // write-up. locality/city/coords are always set together, from the picker or
+  // from a real GPS fix snapped to its nearest known locality — never from free
+  // text, so a label and its coordinates can never disagree.
   const [locality, setLocality] = useState(user?.locality || '');
   const [city, setCity] = useState(user?.city || '');
-  const [coords, setCoords] = useState({ lat: user?.location_lat || 12.9352, lng: user?.location_lng || 77.6245 });
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(
+    user?.location_lat != null && user?.location_lng != null ? { lat: user.location_lat, lng: user.location_lng } : null,
+  );
   const [detecting, setDetecting] = useState(false);
 
   const detectLocation = async () => {
@@ -266,18 +272,21 @@ export function OnboardingPage() {
     try {
       const result = await getCurrentLocation();
       if (result.status === 'granted') {
-        setCoords({ lat: result.latitude, lng: result.longitude });
-        toast.success('Location detected', { description: 'Enter your locality and city below to match it.' });
+        const nearest = nearestLocality(result.latitude, result.longitude);
+        setCity(nearest.city);
+        setLocality(nearest.locality);
+        setCoords({ lat: nearest.lat, lng: nearest.lng });
+        toast.success('Location detected', { description: `Set to ${nearest.locality}, ${nearest.city} — your nearest known locality.` });
       } else if (result.status === 'denied') {
-        toast.error('Location access denied', { description: 'You can try again, or just enter your locality and city manually below.' });
+        toast.error('Location access denied', { description: 'You can try again, or just choose your locality below.' });
       } else if (result.status === 'denied-permanently') {
-        toast.error('Location access is turned off for Lokl', { description: 'Enable it for Lokl in your device Settings, or enter your locality and city manually below.' });
+        toast.error('Location access is turned off for Lokl', { description: 'Enable it for Lokl in your device Settings, or choose your locality below.' });
       } else if (result.status === 'disabled') {
-        toast.error('Location services are off', { description: 'Turn on location services for this device in Settings, or enter your locality and city manually below.' });
+        toast.error('Location services are off', { description: 'Turn on location services for this device in Settings, or choose your locality below.' });
       } else if (result.status === 'timeout') {
-        toast.error('Couldn’t get a location fix in time', { description: 'Try again, or enter your locality and city manually below.' });
+        toast.error('Couldn’t get a location fix in time', { description: 'Try again, or choose your locality below.' });
       } else {
-        toast.error('Couldn’t detect location', { description: result.message || 'Enter your locality and city manually below.' });
+        toast.error('Couldn’t detect location', { description: result.message || 'Choose your locality below.' });
       }
     } finally {
       setDetecting(false);
@@ -295,8 +304,8 @@ export function OnboardingPage() {
         avatar_url: avatar,
         locality,
         city,
-        location_lat: coords.lat,
-        location_lng: coords.lng,
+        location_lat: coords?.lat ?? null,
+        location_lng: coords?.lng ?? null,
         is_verified: true,
       });
     },
@@ -340,21 +349,16 @@ export function OnboardingPage() {
             <label className="text-sm text-[color:var(--color-text-muted)]">Bio</label>
             <textarea value={bio} onChange={(event) => setBio(event.target.value)} className="mt-2 min-h-[88px] w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3" placeholder="Tell your neighbours what you usually sell" />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-sm text-[color:var(--color-text-muted)]">Locality</label>
-              <input value={locality} onChange={(event) => setLocality(event.target.value)} className="mt-2 h-12 w-full rounded-2xl border border-white/10 bg-white/5 px-4" placeholder="Koramangala" />
-            </div>
-            <div>
-              <label className="text-sm text-[color:var(--color-text-muted)]">City</label>
-              <input value={city} onChange={(event) => setCity(event.target.value)} className="mt-2 h-12 w-full rounded-2xl border border-white/10 bg-white/5 px-4" placeholder="Bengaluru" />
-            </div>
-          </div>
+          <LocalityPicker
+            city={city}
+            locality={locality}
+            onChange={(option) => { setCity(option.city); setLocality(option.locality); setCoords({ lat: option.lat, lng: option.lng }); }}
+          />
         </div>
 
         <div className="rounded-2xl border border-white/8 bg-white/5 p-4">
           <div className="mb-2 flex items-center gap-2 text-sm font-medium"><MapPin size={16} className="text-[color:var(--color-secondary)]" /> Use current location</div>
-          <p className="text-sm text-[color:var(--color-text-muted)]">Auto-detect coordinates for better distance sorting. You stay in control of the displayed locality.</p>
+          <p className="text-sm text-[color:var(--color-text-muted)]">Detect your nearest known locality automatically, or choose one above.</p>
           <SecondaryButton className="mt-3" onClick={detectLocation} disabled={detecting}>{detecting ? 'Detecting…' : 'Detect location'}</SecondaryButton>
         </div>
 

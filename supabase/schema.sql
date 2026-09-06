@@ -22,10 +22,13 @@ create table if not exists public.users (
   full_name text default '',
   avatar_url text default '',
   bio text default '',
-  location_lat double precision default 12.9352,
-  location_lng double precision default 77.6245,
-  locality text default 'Koramangala',
-  city text default 'Bengaluru',
+  -- No default — a real place is never a safe stand-in for "unknown." See
+  -- docs/audit/FINDINGS.md LOKL-038/042 and supabase/migrations/*_location_integrity.sql
+  -- for the upgrade path on a deployment created before this fix.
+  location_lat double precision,
+  location_lng double precision,
+  locality text default '',
+  city text default '',
   is_verified boolean default true,
   is_dealer boolean default false,
   is_admin boolean default false,
@@ -60,10 +63,16 @@ create table if not exists public.listings (
   category text not null,
   condition text not null check (condition in ('New','Like New','Good','Fair')),
   images text[] default '{}',
-  location_lat double precision not null,
-  location_lng double precision not null,
+  -- Range + not-(0,0) check, same rationale as search_listings_nearby's guard
+  -- below — a table-level constraint catches every insert path, not only the
+  -- app's own client code. Does not (and cannot, in plain SQL) verify a
+  -- coordinate actually matches a real locality centroid — see
+  -- docs/audit/FINDINGS.md LOKL-042 for that residual gap.
+  location_lat double precision not null check (location_lat between -90 and 90),
+  location_lng double precision not null check (location_lng between -180 and 180),
   locality text not null,
   city text not null,
+  check (not (location_lat = 0 and location_lng = 0)),
   status text not null default 'active' check (status in ('active','sold','reserved','deleted')),
   views integer default 0,
   is_urgent boolean default false,
@@ -275,6 +284,12 @@ as $$
   from public.listings l
   where l.status = 'active'
     and l.moderation_status <> 'blocked'
+    -- Server-side backstop, not just the client-side check in src/lib/utils.ts
+    -- requireValidCoordinate() — anyone with the anon key can call this RPC
+    -- directly, bypassing the client entirely. See docs/audit/FINDINGS.md LOKL-042.
+    and user_lat between -90 and 90
+    and user_lng between -180 and 180
+    and not (user_lat = 0 and user_lng = 0)
     and extensions.st_dwithin(
       extensions.st_setsrid(extensions.st_makepoint(l.location_lng, l.location_lat), 4326)::extensions.geography,
       extensions.st_setsrid(extensions.st_makepoint(user_lng, user_lat), 4326)::extensions.geography,

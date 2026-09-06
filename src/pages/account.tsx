@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { Camera, FileText, Heart, ListPlus, LogOut, MessageSquareText, ShieldAlert, ShieldCheck, Star, Trash2, WifiOff } from 'lucide-react';
 import { toast } from 'sonner';
-import { Avatar, EmptyState, GlassCard, ListingCard, Page, Pill, PrimaryButton, SecondaryButton, SkeletonCard } from '../components/common';
+import { Avatar, EmptyState, GlassCard, ListingCard, LocalityPicker, Page, Pill, PrimaryButton, SecondaryButton, SkeletonCard } from '../components/common';
 import { ImagePicker } from '../lib/device';
 import { timeAgo } from '../lib/utils';
 import { api } from '../services/api';
@@ -62,7 +62,16 @@ export function ProfilePage() {
   const [editing, setEditing] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [form, setForm] = useState({ full_name: user?.full_name || '', phone: user?.phone || '', bio: user?.bio || '', locality: user?.locality || '', avatar_url: user?.avatar_url || '' });
+  const [form, setForm] = useState({
+    full_name: user?.full_name || '',
+    phone: user?.phone || '',
+    bio: user?.bio || '',
+    locality: user?.locality || '',
+    city: user?.city || '',
+    location_lat: user?.location_lat ?? null,
+    location_lng: user?.location_lng ?? null,
+    avatar_url: user?.avatar_url || '',
+  });
 
   const activeQuery = useQuery({ queryKey: ['my-listings', user?.id, 'active'], enabled: Boolean(user?.id), queryFn: () => api.getMyListings(user!.id, 'active') });
   const soldQuery = useQuery({ queryKey: ['my-listings', user?.id, 'sold'], enabled: Boolean(user?.id), queryFn: () => api.getMyListings(user!.id, 'sold') });
@@ -112,13 +121,22 @@ export function ProfilePage() {
           )}
           <div className="min-w-0 flex-1">
             {editing ? <input value={form.full_name} onChange={(event) => setForm((value) => ({ ...value, full_name: event.target.value }))} className="h-11 w-full rounded-2xl border border-white/10 bg-white/5 px-4" /> : <div className="flex items-center gap-2 text-xl font-bold">{user.full_name}{user.is_verified ? <span className="rounded-full bg-[color:var(--color-secondary)]/15 px-2 py-0.5 text-[10px] font-semibold text-[color:var(--color-secondary)]">Verified</span> : null}</div>}
-            {editing ? <input value={form.locality} onChange={(event) => setForm((value) => ({ ...value, locality: event.target.value }))} className="mt-3 h-11 w-full rounded-2xl border border-white/10 bg-white/5 px-4" /> : <div className="mt-1 text-sm text-[color:var(--color-text-muted)]">{user.locality}, {user.city}</div>}
+            {editing ? (
+              <LocalityPicker
+                className="mt-3"
+                city={form.city}
+                locality={form.locality}
+                onChange={(option) => setForm((value) => ({ ...value, city: option.city, locality: option.locality, location_lat: option.lat, location_lng: option.lng }))}
+              />
+            ) : (
+              <div className="mt-1 text-sm text-[color:var(--color-text-muted)]">{user.locality ? `${user.locality}, ${user.city}` : 'Locality not set'}</div>
+            )}
             {editing ? <input value={form.phone} onChange={(event) => setForm((value) => ({ ...value, phone: event.target.value }))} className="mt-3 h-11 w-full rounded-2xl border border-white/10 bg-white/5 px-4" placeholder="Phone number (optional)" /> : <div className="mt-1 text-xs text-[color:var(--color-text-muted)]">{user.phone || 'Phone not added yet'}</div>}
             <div className="mt-3 flex items-center gap-2 text-sm text-[color:var(--color-text-soft)]"><Star size={16} className="fill-[color:var(--color-warning)] text-[color:var(--color-warning)]" /> {user.rating.toFixed(1)} rating · {user.listings_sold} listings sold · Joined {new Date(user.joined_at).getFullYear()}</div>
           </div>
         </div>
         {editing ? <textarea value={form.bio} onChange={(event) => setForm((value) => ({ ...value, bio: event.target.value }))} className="min-h-[96px] w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3" /> : <p className="text-sm leading-6 text-[color:var(--color-text-soft)]">{user.bio || 'Add a short bio to make your profile feel more trustworthy.'}</p>}
-        <div className="grid grid-cols-2 gap-3">{editing ? <><SecondaryButton onClick={() => { setEditing(false); setForm({ full_name: user.full_name, phone: user.phone || '', bio: user.bio, locality: user.locality, avatar_url: user.avatar_url }); }}>Cancel</SecondaryButton><PrimaryButton onClick={() => saveProfile.mutate()}>{saveProfile.isPending ? 'Saving...' : 'Save profile'}</PrimaryButton></> : <><SecondaryButton onClick={() => setEditing(true)}>Edit profile</SecondaryButton><PrimaryButton onClick={() => navigate('/saved')}>Open wishlist</PrimaryButton></>}</div>
+        <div className="grid grid-cols-2 gap-3">{editing ? <><SecondaryButton onClick={() => { setEditing(false); setForm({ full_name: user.full_name, phone: user.phone || '', bio: user.bio, locality: user.locality, city: user.city, location_lat: user.location_lat, location_lng: user.location_lng, avatar_url: user.avatar_url }); }}>Cancel</SecondaryButton><PrimaryButton onClick={() => saveProfile.mutate()}>{saveProfile.isPending ? 'Saving...' : 'Save profile'}</PrimaryButton></> : <><SecondaryButton onClick={() => setEditing(true)}>Edit profile</SecondaryButton><PrimaryButton onClick={() => navigate('/saved')}>Open wishlist</PrimaryButton></>}</div>
       </GlassCard>
 
       <div className="mt-5 flex gap-2 overflow-x-auto pb-1">

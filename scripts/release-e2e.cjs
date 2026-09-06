@@ -34,10 +34,10 @@ async function completeOnboardingIfVisible(page) {
   if (!onboardingVisible) return false;
   await page.getByPlaceholder('Your full name').fill('Release Tester');
   await page.getByPlaceholder(/Tell your neighbours/).fill('Testing Lokl release flows.');
-  // Step 2: locality/city are no longer pre-filled (see docs/audit/FINDINGS.md
-  // LOKL-031) — Finish onboarding stays disabled until both are set.
-  await page.getByPlaceholder('Koramangala').fill('Koramangala');
-  await page.getByPlaceholder('Bengaluru').fill('Bengaluru');
+  // Step 5: locality/city are chosen via LocalityPicker (a real <select> pair,
+  // not free text — see docs/audit/FINDINGS.md LOKL-042), which auto-applies its
+  // first option the moment it renders with nothing set, so no interaction is
+  // needed here for "Finish onboarding" to become enabled.
   await page.getByRole('button', { name: /finish onboarding/i }).click();
   await page.waitForLoadState('networkidle');
   await page.getByText(/items nearby/i).waitFor({ state: 'visible', timeout: 10_000 });
@@ -171,10 +171,17 @@ async function ensureFirstListingSaved(page) {
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.locator('input[type="number"]').first().fill('999');
   await page.getByRole('button', { name: 'Continue' }).click();
+  // Step 5 (LOKL-042): the posting flow's location step is a LocalityPicker, not
+  // free text or raw lat/lng fields — actually exercise changing it, not just the
+  // auto-applied default, then confirm the choice survives through to the posted
+  // listing (not just that the button became clickable).
+  await page.getByLabel('City').selectOption('Mumbai');
+  await expect(page.getByLabel('Locality')).toHaveValue('Bandra West');
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByRole('button', { name: /post listing/i }).click();
   await page.waitForURL('**/listing/**');
   await expect(page.getByRole('heading', { name: 'Release Test Lamp' })).toBeVisible();
+  await expect(page.getByText('Approximate area · Bandra West')).toBeVisible();
 
   await page.getByRole('button', { name: /edit listing/i }).click();
   await expect(page.getByRole('heading', { name: /edit listing/i })).toBeVisible();

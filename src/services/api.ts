@@ -4,7 +4,7 @@ import { getLegalConsent, LEGAL_CONSENT_VERSION } from '../lib/legal';
 import '../lib/app-mode'; // runtime fail-fast guard — see src/lib/app-mode.ts
 import { supabase } from '../lib/supabase';
 import { initNativeGoogleOAuthListener, signInWithGoogleNative } from '../lib/device';
-import { uid, fileToDataUrl } from '../lib/utils';
+import { uid, fileToDataUrl, requireValidCoordinate } from '../lib/utils';
 import { localDb } from './local-db';
 import type {
   ChatThread,
@@ -63,13 +63,11 @@ async function upsertUserProfileFromAuth() {
     full_name: '',
     avatar_url: avatarUrl,
     bio: '',
-    // Deliberately not Koramangala/Bengaluru — an empty locality is this app's
-    // "we don't know where you are yet" signal (see src/pages/market.tsx HomePage
-    // and docs/audit/FINDINGS.md LOKL-031). location_lat/lng keep the DB's inert
-    // numeric placeholder since making them nullable is a larger type migration
-    // than this fix needs — nothing reads them until locality is non-empty.
-    location_lat: 12.9352,
-    location_lng: 77.6245,
+    // Genuinely unknown, not Koramangala/Bengaluru — see docs/audit/FINDINGS.md
+    // LOKL-031/038/042. location_lat/lng are now properly nullable (Step 5), so
+    // "we don't know yet" no longer needs a stand-in placeholder number at all.
+    location_lat: null,
+    location_lng: null,
     locality: '',
     city: '',
     is_verified: true,
@@ -273,11 +271,12 @@ export const api = {
     return data as UserProfile;
   },
 
-  async getFeed(userLat: number, userLng: number, filters: FeedFilters, cursor = 0): Promise<FeedPage> {
-    if (useMock) return localDb.getListingsFeed(userLat, userLng, filters, cursor);
+  async getFeed(userLat: number | null, userLng: number | null, filters: FeedFilters, cursor = 0): Promise<FeedPage> {
+    const [lat, lng] = requireValidCoordinate(userLat, userLng);
+    if (useMock) return localDb.getListingsFeed(lat, lng, filters, cursor);
     const { data, error } = await supabase!.rpc('search_listings_nearby', {
-      user_lat: userLat,
-      user_lng: userLng,
+      user_lat: lat,
+      user_lng: lng,
       radius_km: filters.radius,
       search_query: '',
       categories_filter: null,
@@ -294,11 +293,12 @@ export const api = {
     return { items, nextCursor: items.length === PAGE_SIZE ? cursor + PAGE_SIZE : null };
   },
 
-  async searchListings(query: string, filters: SearchFilters = defaultSearchFilters, userLat: number, userLng: number) {
-    if (useMock) return localDb.searchListings(query, filters, userLat, userLng);
+  async searchListings(query: string, filters: SearchFilters = defaultSearchFilters, userLat: number | null, userLng: number | null) {
+    const [lat, lng] = requireValidCoordinate(userLat, userLng);
+    if (useMock) return localDb.searchListings(query, filters, lat, lng);
     const { data, error } = await supabase!.rpc('search_listings_nearby', {
-      user_lat: userLat,
-      user_lng: userLng,
+      user_lat: lat,
+      user_lng: lng,
       radius_km: filters.radius,
       search_query: query.trim(),
       categories_filter: filters.categories.length ? filters.categories : null,
@@ -351,6 +351,7 @@ export const api = {
   },
 
   async createListing(draft: Omit<ListingDraft, 'images'> & { uploadedImages: string[] }, sellerId: string) {
+    const [lat, lng] = requireValidCoordinate(draft.location_lat, draft.location_lng);
     if (useMock) return localDb.createListing(draft, sellerId);
     const payload = {
       seller_id: sellerId,
@@ -362,8 +363,8 @@ export const api = {
       category: draft.category,
       condition: draft.condition,
       images: draft.uploadedImages,
-      location_lat: draft.location_lat,
-      location_lng: draft.location_lng,
+      location_lat: lat,
+      location_lng: lng,
       locality: draft.locality,
       city: draft.city,
     };
@@ -373,6 +374,7 @@ export const api = {
   },
 
   async updateListing(id: string, patch: Partial<Listing>) {
+    if (patch.location_lat !== undefined || patch.location_lng !== undefined) requireValidCoordinate(patch.location_lat, patch.location_lng);
     if (useMock) return localDb.updateListing(id, patch);
     const { data, error } = await supabase!.from('listings').update(patch).eq('id', id).select('*').single();
     if (error) throw error;

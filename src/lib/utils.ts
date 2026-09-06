@@ -15,6 +15,27 @@ export function currency(value: number, isFree = false) {
   }).format(value);
 }
 
+// Query-boundary guard for searchListings()/getFeed()/createListing() — see
+// docs/audit/FINDINGS.md LOKL-042. Rejects null (never silently substitute a
+// placeholder), rejects the (0,0) "null island" sentinel, and rejects anything
+// outside valid lat/lng ranges, rather than computing a distance from nonsense.
+// Returns a [lat, lng] tuple (rather than being a TS `asserts` function) so both
+// values come back as real, non-null `number`s from one call, including inside
+// closures — `asserts` narrowing only narrows one parameter and doesn't survive
+// capture in a nested callback.
+export function requireValidCoordinate(lat: number | null | undefined, lng: number | null | undefined): [number, number] {
+  if (lat == null || lng == null) {
+    throw new Error('Location is required — set a locality before searching or browsing nearby listings.');
+  }
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    throw new Error(`Invalid coordinates (${lat}, ${lng}).`);
+  }
+  if (lat === 0 && lng === 0) {
+    throw new Error('Coordinates (0, 0) are not a valid location.');
+  }
+  return [lat, lng];
+}
+
 export function distanceKm(lat1: number, lng1: number, lat2: number, lng2: number) {
   const toRad = (n: number) => (n * Math.PI) / 180;
   const R = 6371;

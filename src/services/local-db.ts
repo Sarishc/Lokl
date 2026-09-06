@@ -1,7 +1,7 @@
 import { addDays } from 'date-fns';
 import { initialMockDb } from '../data/mock';
 import { LISTING_EXPIRY_DAYS, PAGE_SIZE, defaultSearchFilters } from '../lib/constants';
-import { distanceKm, uid } from '../lib/utils';
+import { requireValidCoordinate, distanceKm, uid } from '../lib/utils';
 import type {
   AppDatabase,
   ChatThread,
@@ -104,10 +104,10 @@ export const localDb = {
         full_name: '',
         avatar_url: '',
         bio: '',
-        // Deliberately not Koramangala/Bengaluru — see src/services/api.ts
-        // upsertUserProfileFromAuth and docs/audit/FINDINGS.md LOKL-031.
-        location_lat: 12.9352,
-        location_lng: 77.6245,
+        // Genuinely unknown — see src/services/api.ts upsertUserProfileFromAuth
+        // and docs/audit/FINDINGS.md LOKL-031/038/042.
+        location_lat: null,
+        location_lng: null,
         locality: '',
         city: '',
         is_verified: true,
@@ -138,10 +138,10 @@ export const localDb = {
         full_name: '',
         avatar_url: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=200&q=80',
         bio: '',
-        // Deliberately not Koramangala/Bengaluru — see src/services/api.ts
-        // upsertUserProfileFromAuth and docs/audit/FINDINGS.md LOKL-031.
-        location_lat: 12.9352,
-        location_lng: 77.6245,
+        // Genuinely unknown — see src/services/api.ts upsertUserProfileFromAuth
+        // and docs/audit/FINDINGS.md LOKL-031/038/042.
+        location_lat: null,
+        location_lng: null,
         locality: '',
         city: '',
         is_verified: true,
@@ -202,10 +202,11 @@ export const localDb = {
     return !existing;
   },
 
-  getListingsFeed(userLat: number, userLng: number, filters: FeedFilters, cursor = 0): FeedPage {
+  getListingsFeed(userLat: number | null, userLng: number | null, filters: FeedFilters, cursor = 0): FeedPage {
+    const [lat, lng] = requireValidCoordinate(userLat, userLng);
     const db = readDb();
     const items = db.listings
-      .filter((listing) => listing.status === 'active' && distanceKm(userLat, userLng, listing.location_lat, listing.location_lng) <= filters.radius)
+      .filter((listing) => listing.status === 'active' && distanceKm(lat, lng, listing.location_lat, listing.location_lng) <= filters.radius)
       .filter((listing) => {
         switch (filters.preset) {
           case 'under500': return listing.price <= 500;
@@ -217,7 +218,7 @@ export const localDb = {
           default: return true;
         }
       })
-      .sort((a, b) => distanceKm(userLat, userLng, a.location_lat, a.location_lng) - distanceKm(userLat, userLng, b.location_lat, b.location_lng));
+      .sort((a, b) => distanceKm(lat, lng, a.location_lat, a.location_lng) - distanceKm(lat, lng, b.location_lat, b.location_lng));
 
     return {
       items: items.slice(cursor, cursor + PAGE_SIZE),
@@ -225,7 +226,8 @@ export const localDb = {
     };
   },
 
-  searchListings(query: string, filters: SearchFilters = defaultSearchFilters, userLat: number, userLng: number) {
+  searchListings(query: string, filters: SearchFilters = defaultSearchFilters, userLat: number | null, userLng: number | null) {
+    const [lat, lng] = requireValidCoordinate(userLat, userLng);
     const db = readDb();
     const normalized = query.trim().toLowerCase();
     const results = db.listings
@@ -234,13 +236,13 @@ export const localDb = {
       .filter((listing) => !filters.categories.length || filters.categories.includes(listing.category))
       .filter((listing) => listing.price >= filters.minPrice && listing.price <= filters.maxPrice)
       .filter((listing) => !filters.conditions.length || filters.conditions.includes(listing.condition))
-      .filter((listing) => distanceKm(userLat, userLng, listing.location_lat, listing.location_lng) <= filters.radius);
+      .filter((listing) => distanceKm(lat, lng, listing.location_lat, listing.location_lng) <= filters.radius);
 
     const sorted = [...results].sort((a, b) => {
       if (filters.sortBy === 'newest') return +new Date(b.created_at) - +new Date(a.created_at);
       if (filters.sortBy === 'price-asc') return a.price - b.price;
       if (filters.sortBy === 'price-desc') return b.price - a.price;
-      return distanceKm(userLat, userLng, a.location_lat, a.location_lng) - distanceKm(userLat, userLng, b.location_lat, b.location_lng);
+      return distanceKm(lat, lng, a.location_lat, a.location_lng) - distanceKm(lat, lng, b.location_lat, b.location_lng);
     });
 
     return sorted;
@@ -273,6 +275,7 @@ export const localDb = {
   },
 
   createListing(draft: Omit<ListingDraft, 'images'> & { uploadedImages: string[] }, sellerId: string) {
+    const [lat, lng] = requireValidCoordinate(draft.location_lat, draft.location_lng);
     const db = readDb();
     const listing: Listing = {
       id: uid('listing'),
@@ -285,8 +288,8 @@ export const localDb = {
       category: draft.category,
       condition: draft.condition,
       images: draft.uploadedImages,
-      location_lat: draft.location_lat,
-      location_lng: draft.location_lng,
+      location_lat: lat,
+      location_lng: lng,
       locality: draft.locality,
       city: draft.city,
       status: 'active',

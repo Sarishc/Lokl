@@ -62,6 +62,7 @@ Re-run this exact pair of commands against any future release AAB for an apples-
 | Post-Step-2 (camera/geolocation/app plugins added, `minifyEnabled false`) | `e6e8f83` | 5,636,810 – 5,714,234 bytes (~5.38–5.45 MB) |
 | Post-Step-3 (same plugins, R8 + resource shrinking enabled) | `41f4b5a` | 1,929,624 – 1,974,468 bytes (~1.84–1.88 MB) |
 | Post-Step-4 (`@capacitor/browser` added for native Google OAuth) | `763c3e6`+Step 4 | 1,935,932 – 1,980,601 bytes (~1.85–1.89 MB) |
+| Post-Step-5 (locality picker + validation, no new native deps) | Step 5 head | 1,936,926 – 1,983,034 bytes (~1.85–1.89 MB) |
 
 **Verdict**: adding real camera and geolocation capability was worth what it cost — once shrinking was actually turned on. Delivered size is now ~35% *smaller* than the Step 1 baseline, despite two genuine new native capabilities being added, because R8/resource shrinking claws back not just the plugins' own footprint (unused Kotlin stdlib classes, unused CameraX code paths) but previously-unshrunk AndroidX/Capacitor bulk that Step 1's build never benefited from either (it also had `minifyEnabled false`). The size regression was real and significant while shrinking was off (Step 2: +92% over baseline) — it just wasn't the plugins' fault so much as shrinking never having been enabled in the first place. Step 4's `@capacitor/browser` addition cost only ~6 KB delivered (a thin Custom Tabs/SFSafariViewController wrapper, not a heavy native SDK) — still well under the Step 1 baseline.
 

@@ -5,7 +5,6 @@ export const APP_NAME = 'Lokl';
 export const TAGLINE = 'Your neighbourhood marketplace';
 export const DEFAULT_PHONE_CODE = '+91';
 export const DEFAULT_CITY = 'Bengaluru';
-export const DEFAULT_LOCALITY = 'Koramangala';
 export const PAGE_SIZE = 20;
 export const DEFAULT_RADIUS: RadiusOption = 5;
 export const LISTING_EXPIRY_DAYS = 60;
